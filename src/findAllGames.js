@@ -1,0 +1,218 @@
+const path = require("path");
+const fs = require("fs/promises");
+const { app } = require("electron");
+const vdf = require("vdf-parser");
+const WinReg = require("winreg");
+const sqlite3 = require("sqlite3").verbose();
+const { open } = require("sqlite");
+
+const CONFIG_FILE_NAME = "config.conf";
+const DEFAULT_STEAM_PATH = "C:\\Program Files (x86)\\Steam";
+const DEFAULT_EPIC_MANIFESTS_PATH =
+  "C:\\ProgramData\\Epic\\EpicGamesLauncher\\Data\\Manifests";
+const DEFAULT_GOG_DB_PATH =
+  "C:\\ProgramData\\GOG.com\\Galaxy\\storage\\galaxy-2.0.db";
+
+// --------------------------- STEAM ---------------------------
+async function findSteamGames() {
+  try {
+    const steamPath = await findSteamPath();
+    const libraryVdfPath = path.join(
+      steamPath,
+      "steamapps",
+      "libraryfolders.vdf"
+    );
+    const libraryVdfRaw = await fs.readFile(libraryVdfPath, "utf-8");
+    const libraries = vdf.parse(libraryVdfRaw);
+
+    const libraryPaths = [];
+    for (const key in libraries.libraryfolders) {
+      const item = libraries.libraryfolders[key];
+      if (typeof item === "object" && item.path) {
+        libraryPaths.push(item.path);
+      } else if (typeof item === "string") {
+        libraryPaths.push(item);
+      }
+    }
+
+    const games = [];
+    for (const libraryPath of libraryPaths) {
+      const steamAppsPath = path.join(libraryPath, "steamapps");
+      const files = await fs.readdir(steamAppsPath);
+
+      for (const file of files) {
+        if (file.startsWith("appmanifest_") && file.endsWith(".acf")) {
+          const appManifestRaw = await fs.readFile(
+            path.join(steamAppsPath, file),
+            "utf-8"
+          );
+          const manifest = vdf.parse(appManifestRaw);
+
+          const appid = parseInt(manifest.AppState.appid, 10);
+          const name = manifest.AppState.name;
+          const installDir = manifest.AppState.installdir;
+          const fullInstallPath = path.join(
+            libraryPath,
+            "steamapps",
+            "common",
+            installDir
+          );
+
+          games.push({
+            name,
+            appid,
+            installPath: fullInstallPath,
+            platform: "Steam",
+          });
+        }
+      }
+    }
+
+    return games;
+  } catch (error) {
+    console.error("Erro ao procurar jogos da Steam:", error);
+    return [];
+  }
+}
+
+function findSteamPath() {
+  return new Promise((resolve) => {
+    const regKey = new WinReg({
+      hive: WinReg.HKLM,
+      key: "\\SOFTWARE\\WOW6432Node\\Valve\\Steam",
+    });
+
+    regKey.get("InstallPath", (err, item) => {
+      if (err || !item?.value) {
+        console.warn("Não encontrado no registro, usando caminho padrão.");
+        resolve(DEFAULT_STEAM_PATH);
+      } else {
+        console.log("Steam encontrado no registro:", item.value);
+        resolve(item.value);
+      }
+    });
+  });
+}
+
+// --------------------------- EPIC GAMES ---------------------------
+async function findEpicGames() {
+  try {
+    const epicManifestsPath = await findEpicManifestsPath();
+    const files = await fs.readdir(epicManifestsPath);
+    const games = [];
+
+    for (const file of files) {
+      if (file.endsWith(".item")) {
+        const content = await fs.readFile(
+          path.join(epicManifestsPath, file),
+          "utf-8"
+        );
+        const manifest = JSON.parse(content);
+        games.push({
+          name: manifest.DisplayName,
+          appid: manifest.AppName,
+          installPath: manifest.InstallLocation,
+          platform: "Epic Games",
+        });
+      }
+    }
+
+    return games;
+  } catch (error) {
+    console.error("Erro ao procurar jogos da Epic Games:", error);
+    return [];
+  }
+}
+
+function findEpicManifestsPath() {
+  return new Promise((resolve) => {
+    const regKey = new WinReg({
+      hive: WinReg.HKLM,
+      key: "\\\\SOFTWARE\\\\WOW6432Node\\\\Epic Games\\\\EpicGamesLauncher",
+    });
+
+    regKey.get("AppDataPath", (err, item) => {
+      if (err || !item?.value) {
+        console.warn(
+          "Epic Games Launcher não encontrado no registro, usando caminho padrão."
+        );
+        resolve(DEFAULT_EPIC_MANIFESTS_PATH);
+      } else {
+        console.log("Epic Games Launcher encontrado no registro:", item.value);
+        -resolve(path.join(item.value, "Data", "Manifests")); // ERRADO
+        +resolve(path.join(item.value, "Manifests")); // CERTO
+      }
+    });
+  });
+}
+
+// --------------------------- GOG ---------------------------
+async function findGogGames() {
+  try {
+    const gogDbPath = await findGogDbPath();
+    const db = await open({ filename: gogDbPath, driver: sqlite3.Database });
+
+    const rows = await db.all("SELECT title, install_path FROM InstalledGames");
+    await db.close();
+
+    return rows.map((row) => ({
+      name: row.title,
+      installPath: row.install_path,
+      platform: "GOG Galaxy",
+    }));
+  } catch (error) {
+    console.error("Erro ao procurar jogos da GOG:", error);
+    return [];
+  }
+}
+
+function findGogDbPath() {
+  return new Promise((resolve) => {
+    const regKey = new WinReg({
+      hive: WinReg.HKLM,
+      key: "\\SOFTWARE\\WOW6432Node\\GOG.com\\GalaxyClient",
+    });
+
+    regKey.get("path", (err, item) => {
+      if (err || !item?.value) {
+        console.warn(
+          "GOG Galaxy não encontrado no registro, usando caminho padrão."
+        );
+        resolve(DEFAULT_GOG_DB_PATH);
+      } else {
+        console.log("GOG Galaxy encontrado no registro:", item.value);
+        resolve(path.join(item.value, "storage", "galaxy-2.0.db"));
+      }
+    });
+  });
+}
+
+// --------------------------- FINAL: JUNTA TUDO ---------------------------
+async function findAllGames() {
+  const steamGames = await findSteamGames();
+  const epicGames = await findEpicGames();
+  const gogGames = await findGogGames();
+
+  const allGames = [...steamGames, ...epicGames, ...gogGames];
+  console.log("Todos os jogos encontrados:", allGames);
+
+  await updateConfWithGames(allGames);
+}
+
+async function updateConfWithGames(games) {
+  const configPath = path.join(app.getPath("userData"), CONFIG_FILE_NAME);
+
+  try {
+    const data = await fs.readFile(configPath, "utf-8");
+    const parsed = JSON.parse(data);
+
+    parsed.games = games;
+
+    await fs.writeFile(configPath, JSON.stringify(parsed, null, 2), "utf-8");
+    console.log("Arquivo conf atualizado com todos os jogos");
+  } catch (error) {
+    console.error("Erro ao atualizar o arquivo conf:", error);
+  }
+}
+
+module.exports = findAllGames;
