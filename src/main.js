@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const findAllGames = require("./findAllGames");
@@ -84,6 +84,26 @@ const ensureUUID = async () => {
   }
 };
 
+ipcMain.handle("updateGameImage", async (event, gameName, imageUrl) => {
+  const configPath = path.join(app.getPath("userData"), "config.conf");
+
+  try {
+    const data = await fs.readFile(configPath, "utf-8");
+    const parsed = JSON.parse(data);
+
+    const game = parsed.games.find((g) => g.name === gameName);
+    if (game) {
+      game.imageUrl = imageUrl;
+      await fs.writeFile(configPath, JSON.stringify(parsed, null, 2), "utf-8");
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Erro ao atualizar imagem do jogo no config:", error);
+    return false;
+  }
+});
+
 ipcMain.handle("add-game", async (event, game) => {
   const configPath = path.join(app.getPath("userData"), "config.conf");
 
@@ -98,7 +118,8 @@ ipcMain.handle("add-game", async (event, game) => {
     parsed.games.push({
       name: game.name,
       appid: game.appid,
-      installPath: "",
+      installPath: game.installPath, // <- agora vai salvar o caminho corretamente
+      platform: game.platform || "Manual", // se quiser, também salva a plataforma
     });
 
     await fs.writeFile(configPath, JSON.stringify(parsed, null, 2), "utf-8");
@@ -143,7 +164,7 @@ const createWindow = () => {
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 
   /** IPC para enviar o UUID para o renderer */
   ipcMain.handle("get-uuid", async () => {
@@ -161,6 +182,16 @@ ipcMain.handle("get-config", async () => {
     console.error("Erro ao ler config:", error);
     return null;
   }
+});
+
+ipcMain.handle("dialog:openFolder", async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openDirectory"],
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths[0]; // <--- retorna apenas o path, não o objeto inteiro
 });
 
 // Evento padrão do Electron

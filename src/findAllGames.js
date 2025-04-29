@@ -199,17 +199,81 @@ async function findAllGames() {
   await updateConfWithGames(allGames);
 }
 
-async function updateConfWithGames(games) {
+async function updateConfWithGames(newGames) {
   const configPath = path.join(app.getPath("userData"), CONFIG_FILE_NAME);
 
   try {
     const data = await fs.readFile(configPath, "utf-8");
     const parsed = JSON.parse(data);
 
-    parsed.games = games;
+    if (!parsed.games) {
+      parsed.games = [];
+    }
+
+    const existingGames = parsed.games;
+
+    // Copiar os jogos atuais
+    const mergedGames = [...existingGames];
+
+    for (const newGame of newGames) {
+      // Corrigir path para Windows
+      const normalizedNewPath = path
+        .normalize(newGame.installPath || "")
+        .toLowerCase();
+
+      // Verifica se já existe por caminho OU por (nome + plataforma)
+      const existingIndex = existingGames.findIndex((game) => {
+        const normalizedExistingPath = path
+          .normalize(game.installPath || "")
+          .toLowerCase();
+        return (
+          normalizedExistingPath === normalizedNewPath ||
+          (game.name.toLowerCase() === newGame.name.toLowerCase() &&
+            game.platform === newGame.platform)
+        );
+      });
+
+      if (existingIndex !== -1) {
+        // Se já existe mas o caminho mudou, atualiza
+        const existingGame = mergedGames[existingIndex];
+        if (
+          normalizedNewPath &&
+          path.normalize(existingGame.installPath || "").toLowerCase() !==
+            normalizedNewPath
+        ) {
+          console.log(`Atualizando caminho do jogo: ${newGame.name}`);
+          existingGame.installPath = newGame.installPath; // Atualiza o caminho
+        }
+      } else {
+        // Não existe ainda, adiciona
+        mergedGames.push(newGame);
+      }
+    }
+
+    // Ordena: Steam > Epic Games > GOG Galaxy > Manual > Outros
+    const platformOrder = {
+      Steam: 1,
+      "Epic Games": 2,
+      "GOG Galaxy": 3,
+      Manual: 4,
+    };
+
+    mergedGames.sort((a, b) => {
+      const orderA = platformOrder[a.platform] || 99;
+      const orderB = platformOrder[b.platform] || 99;
+
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    parsed.games = mergedGames;
 
     await fs.writeFile(configPath, JSON.stringify(parsed, null, 2), "utf-8");
-    console.log("Arquivo conf atualizado com todos os jogos");
+    console.log(
+      "Arquivo conf atualizado com jogos mesclados, corrigidos e ordenados."
+    );
   } catch (error) {
     console.error("Erro ao atualizar o arquivo conf:", error);
   }

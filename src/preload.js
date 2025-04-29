@@ -4,5 +4,6 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
   getConfig: () => ipcRenderer.invoke("get-config"),
-  addGame: (game) => ipcRenderer.invoke('add-game', game),
+  addGame: (game) => ipcRenderer.invoke("add-game", game),
+  selectFolder: () => ipcRenderer.invoke("dialog:openFolder"),
 });
