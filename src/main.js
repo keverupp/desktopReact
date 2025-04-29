@@ -3,6 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 const findAllGames = require("./findAllGames");
 require("dotenv").config();
+const ws = require("windows-shortcuts");
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require("electron-squirrel-startup")) {
@@ -268,7 +269,7 @@ const createWindow = () => {
               "script-src 'self' 'unsafe-eval'; " +
               "style-src 'self' 'unsafe-inline'; " +
               "font-src 'self' data:; " +
-              "connect-src 'self' https://api.steampowered.com https://www.steamgriddb.com;",
+              "connect-src 'self' http://localhost:3001 https://api.steampowered.com https://www.steamgriddb.com;",
           ],
         },
       });
@@ -305,6 +306,27 @@ ipcMain.handle("dialog:openFolder", async () => {
     return null;
   }
   return result.filePaths[0]; // <--- retorna apenas o path, não o objeto inteiro
+});
+
+ipcMain.handle("dialog:openShortcut", async () => {
+  const result = await dialog.showOpenDialog({
+    filters: [{ name: "Shortcuts", extensions: ["lnk"] }],
+    properties: ["openFile"],
+  });
+
+  if (result.canceled || result.filePaths.length === 0) return null;
+
+  const lnkPath = result.filePaths[0];
+
+  return new Promise((resolve, reject) => {
+    ws.query(lnkPath, (err, shortcut) => {
+      if (err) return reject(err);
+      resolve({
+        targetPath: shortcut.target,
+        shortcutName: path.basename(lnkPath, ".lnk"),
+      });
+    });
+  });
 });
 
 // Evento padrão do Electron

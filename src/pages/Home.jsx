@@ -6,6 +6,7 @@ import "swiper/css";
 import "swiper/css/navigation";
 import "swiper/css/pagination";
 import GameImageFetcher from "../components/GameImageFetcher.jsx";
+import GroupManager from "../components/GroupManager.jsx";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -36,6 +37,14 @@ export default function Home() {
     const folderPath = await window.electronAPI.selectFolder();
     if (folderPath) {
       setNewGamePath(folderPath);
+    }
+  };
+
+  const handleSelectShortcut = async () => {
+    const result = await window.electronAPI.selectShortcut();
+    if (result) {
+      setNewGamePath(result.targetPath);
+      setNewGameName(result.shortcutName); // se quiser preencher automaticamente
     }
   };
 
@@ -81,15 +90,9 @@ export default function Home() {
             onClick={() =>
               document.getElementById("add_game_modal").showModal()
             }
-            className="btn btn-primary btn-outline"
+            className="btn btn-primary btn-sm btn-outline"
           >
             Adicionar Jogo
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => navigate("/newpage")}
-          >
-            Ir para nova página
           </button>
         </div>
       </div>
@@ -113,7 +116,10 @@ export default function Home() {
                   value={newGamePath}
                   readOnly
                 />
-                <button onClick={handleSelectPath} className="btn btn-neutral">
+                <button
+                  onClick={handleSelectShortcut}
+                  className="btn btn-neutral"
+                >
                   Procurar
                 </button>
               </div>
@@ -221,6 +227,7 @@ export default function Home() {
       ) : (
         <div className="text-base-content">Carregando jogos...</div>
       )}
+      <GroupManager />
     </div>
   );
 }

@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSteamGridImages: (name) =>
     ipcRenderer.invoke("fetch-steamgrid-images", name),
   updateGameImages: (game) => ipcRenderer.invoke("update-game-images", game),
+  getUUID: () => ipcRenderer.invoke("get-config"),
+  selectShortcut: () => ipcRenderer.invoke("dialog:openShortcut"),
 });

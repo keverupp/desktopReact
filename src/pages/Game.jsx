@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 
 export default function Game() {
   const navigate = useNavigate();
-
-  // Pega o jogo salvo no localStorage
   const selectedGame = JSON.parse(localStorage.getItem("selectedGame"));
 
   if (!selectedGame)
@@ -28,8 +26,8 @@ export default function Game() {
 
   return (
     <div className="bg-base-100 text-white min-h-screen">
-      {/* Hero (sem logo) */}
-      <div className="relative h-64 md:h-96 w-full">
+      {/* Hero com responsividade máxima */}
+      <div className="relative w-full min-h-[200px] aspect-[3/1] sm:aspect-[3.5/1] md:aspect-[4/1] lg:aspect-[5/1] overflow-hidden">
         <img
           src={getHeroImage()}
           alt="Hero"
@@ -40,33 +38,37 @@ export default function Game() {
             )}`)
           }
         />
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10" />
       </div>
 
-      {/* Conteúdo */}
-      <div className="p-6 flex flex-col md:flex-row gap-6">
-        <img
-          src={getPosterImage()}
-          alt="Poster"
-          className="w-48 rounded-xl shadow-lg object-cover"
-          onError={(e) =>
-            (e.target.src = `https://placehold.co/600x900?text=${encodeURIComponent(
-              name
-            )}`)
-          }
-        />
-        <div>
-          <h2 className="text-2xl font-bold mb-2">{name}</h2>
-          <p className="text-gray-300">
-            Esta é uma página de exemplo para exibir as imagens de um jogo
-            usando os dados do seu save.
-          </p>
-          <button
-            className="mt-4 btn btn-outline btn-secondary"
-            onClick={() => navigate(-1)}
-          >
-            Voltar
-          </button>
+      {/* Conteúdo sobreposto ao hero */}
+      <div className="relative z-20 -mt-28 sm:-mt-32 md:-mt-40 px-4 sm:px-6 md:px-10 xl:px-24">
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 items-start">
+          <img
+            src={getPosterImage()}
+            alt="Poster"
+            className="w-[40vw] sm:w-32 md:w-40 lg:w-52 xl:w-60 min-w-[120px] max-w-[220px] rounded-xl shadow-lg object-cover border border-white/10"
+            onError={(e) =>
+              (e.target.src = `https://placehold.co/600x900?text=${encodeURIComponent(
+                name
+              )}`)
+            }
+          />
+          <div className="mt-2 sm:mt-8 flex-1">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2 break-words">
+              {name}
+            </h2>
+            <p className="text-gray-300 text-sm sm:text-base max-w-full mb-4">
+              Esta é uma página de exemplo para exibir as imagens de um jogo
+              usando os dados do seu save.
+            </p>
+            <button
+              className="btn btn-outline btn-secondary"
+              onClick={() => navigate(-1)}
+            >
+              Voltar
+            </button>
+          </div>
         </div>
       </div>
     </div>
