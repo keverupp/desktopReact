@@ -3,7 +3,6 @@ const fs = require("fs/promises");
 const { app } = require("electron");
 const vdf = require("vdf-parser");
 const WinReg = require("winreg");
-const sqlite3 = require("sqlite3").verbose();
 const { open } = require("sqlite");
 
 const CONFIG_FILE_NAME = "config.conf";
@@ -50,6 +49,9 @@ async function findSteamGames() {
 
           const appid = parseInt(manifest.AppState.appid, 10);
           const name = manifest.AppState.name;
+          if (name.toLowerCase().includes("DLC")) {
+            continue;
+          }
           const installDir = manifest.AppState.installdir;
           const fullInstallPath = path.join(
             libraryPath,

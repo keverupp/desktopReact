@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const findAllGames = require("./findAllGames");
+require("dotenv").config();
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require("electron-squirrel-startup")) {
@@ -16,6 +17,118 @@ let appUUID = null;
 const https = require("https");
 const http = require("http");
 const { URL } = require("url");
+
+const STEAMGRID_API_KEY = process.env.STEAMGRIDDB_API_KEY;
+
+ipcMain.handle("update-game-images", async (event, updatedGame) => {
+  const configPath = path.join(app.getPath("userData"), "config.conf");
+
+  try {
+    const content = await fs.readFile(configPath, "utf-8");
+    const config = JSON.parse(content);
+
+    const updatedGames = config.games.map((g) => {
+      return g.name === updatedGame.name
+        ? { ...g, ...updatedGame } // adiciona heroUrl, posterUrl, etc
+        : g;
+    });
+
+    const newConfig = { ...config, games: updatedGames };
+
+    await fs.writeFile(configPath, JSON.stringify(newConfig, null, 2), "utf-8");
+    console.log(`💾 Imagens salvas no config.conf para: ${updatedGame.name}`);
+
+    return true;
+  } catch (e) {
+    console.error("Erro ao salvar imagens no config:", e);
+    return false;
+  }
+});
+
+function getFromSteamGridDB(path) {
+  const options = {
+    hostname: "www.steamgriddb.com",
+    path: `/api/v2/${path}`,
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${STEAMGRID_API_KEY}`, // certifique-se de ter definido isso acima
+    },
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        try {
+          const json = JSON.parse(data);
+          resolve(json);
+        } catch (err) {
+          reject(new Error("Erro ao parsear JSON: " + data.slice(0, 100)));
+        }
+      });
+    });
+
+    req.on("error", (err) => reject(err));
+    req.end();
+  });
+}
+
+ipcMain.handle("fetch-steamgrid-images", async (event, gameName) => {
+  try {
+    console.log(`🕹️ Buscando jogo: ${gameName}`);
+
+    // 1. Buscar ID do jogo via autocomplete
+    const search = await getFromSteamGridDB(
+      `search/autocomplete/${encodeURIComponent(gameName)}`
+    );
+    const first = search?.data?.[0];
+
+    if (!first) {
+      console.warn(`⚠️ Nenhum resultado encontrado para "${gameName}"`);
+      return null;
+    }
+
+    const id = first.id;
+    console.log(`✅ ID encontrado: ${id}`);
+
+    // 2. Buscar poster (600x900) via /grids
+    let posterUrl = null;
+    try {
+      const grids = await getFromSteamGridDB(`grids/game/${id}`);
+      const poster = grids?.data?.find(
+        (g) => g.width === 600 && g.height === 900 && !g.nsfw
+      );
+      posterUrl = poster?.url || null;
+      if (posterUrl) {
+        console.log(`🎨 Poster encontrado: ${posterUrl}`);
+      } else {
+        console.warn(`⚠️ Nenhum poster 600x900 encontrado para ID ${id}`);
+      }
+    } catch (e) {
+      console.warn("⚠️ Erro ao buscar poster:", e.message);
+    }
+
+    // 3. Buscar hero via /heroes
+    let heroUrl = null;
+    try {
+      const heroes = await getFromSteamGridDB(`heroes/game/${id}`);
+      heroUrl = heroes?.data?.[0]?.url || null;
+      if (heroUrl) {
+        console.log(`🏞️ Hero encontrado: ${heroUrl}`);
+      } else {
+        console.warn(`⚠️ Nenhum hero encontrado para ID ${id}`);
+      }
+    } catch (e) {
+      console.warn("⚠️ Erro ao buscar hero:", e.message);
+    }
+
+    return { posterUrl, heroUrl };
+  } catch (err) {
+    console.error("❌ Erro geral ao buscar imagens:", err.message);
+    return null;
+  }
+});
 
 const ensureUUID = async () => {
   const configPath = path.join(app.getPath("userData"), CONFIG_FILE_NAME);
@@ -151,11 +264,11 @@ const createWindow = () => {
           ...details.responseHeaders,
           "Content-Security-Policy": [
             "default-src 'self'; " +
-              "img-src 'self' https://cdn.cloudflare.steamstatic.com https://placehold.co; " +
+              "img-src 'self' data: blob: https://cdn.cloudflare.steamstatic.com https://placehold.co https://www.steamgriddb.com https://cdn2.steamgriddb.com; " +
               "script-src 'self' 'unsafe-eval'; " +
               "style-src 'self' 'unsafe-inline'; " +
               "font-src 'self' data:; " +
-              "connect-src 'self' https://api.steampowered.com;",
+              "connect-src 'self' https://api.steampowered.com https://www.steamgriddb.com;",
           ],
         },
       });
@@ -164,7 +277,7 @@ const createWindow = () => {
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
 
   /** IPC para enviar o UUID para o renderer */
   ipcMain.handle("get-uuid", async () => {

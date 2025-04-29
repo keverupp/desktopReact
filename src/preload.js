@@ -6,4 +6,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getConfig: () => ipcRenderer.invoke("get-config"),
   addGame: (game) => ipcRenderer.invoke("add-game", game),
   selectFolder: () => ipcRenderer.invoke("dialog:openFolder"),
+  getSteamGridKey: () => process.env.STEAMGRIDDB_API_KEY,
+  getSteamGridImages: (name) =>
+    ipcRenderer.invoke("fetch-steamgrid-images", name),
+  updateGameImages: (game) => ipcRenderer.invoke("update-game-images", game),
 });

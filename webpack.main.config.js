@@ -1,11 +1,22 @@
+const path = require("path");
+const webpack = require("webpack");
+require("dotenv").config();
+
 module.exports = {
   /**
-   * This is the main entry point for your application, it's the first file
-   * that runs in the main process.
+   * Este é o ponto de entrada principal para o processo principal.
    */
-  entry: './src/main.js',
-  // Put your normal webpack config below here
+  entry: "./src/main.js",
+
   module: {
-    rules: require('./webpack.rules'),
+    rules: require("./webpack.rules"), // suas regras continuam
   },
+
+  plugins: [
+    new webpack.DefinePlugin({
+      "process.env.STEAMGRIDDB_API_KEY": JSON.stringify(
+        process.env.STEAMGRIDDB_API_KEY
+      ),
+    }),
+  ],
 };
